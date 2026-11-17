@@ -332,6 +332,8 @@ Write-Host ("`n编译耗时 {0:00}:{1:00}" -f [int]$Elapsed.TotalMinutes, $Elaps
 # ============================================================
 if (Test-Path "dist\run.dist") {
     robocopy "dist\run.dist" "dist" /move /E /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { exit 1 }
+    $global:LASTEXITCODE = 0
     Remove-Item "dist\run.build" -Recurse -Force -ErrorAction SilentlyContinue
 }
 
