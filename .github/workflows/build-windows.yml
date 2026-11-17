@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Сборка MiHome-Windows для Windows 11 x64 (и Windows 10 x64) на GitHub Actions.
+#
+# Запуск: вкладка Actions -> «Build Windows x64» -> Run workflow.
+# Результат: артефакт MiHome-Windows-ru-win64.zip (папка dist целиком:
+# MiHome-Windows.exe + зависимости). Один .exe без остальных файлов не работает.
+name: Build Windows x64
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: windows-latest   # Windows x64, на нём стоят MSVC и Windows SDK
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+
+      # Проверка перевода не требует Qt и аккаунта Mi Home: каждый tr()/trf()
+      # имеет русский текст, плейсхолдеры совпадают, китайских литералов вне
+      # tr() не осталось.
+      - name: Проверка локализации
+        run: python -m tests.i18n_test
+
+      # build.ps1 создаёт .venv, ставит зависимости (включая Nuitka),
+      # собирает через MSVC и делает проверку «в сборке нет личных данных».
+      - name: Сборка (Nuitka + MSVC)
+        shell: pwsh
+        run: ./build.ps1
+
+      - name: Проверка результата
+        shell: pwsh
+        run: |
+          if (-not (Test-Path dist/MiHome-Windows.exe)) { throw "dist/MiHome-Windows.exe не найден" }
+          if (-not (Test-Path dist/app/i18n/locales/ru.json)) { throw "в сборку не попал файл перевода ru.json" }
+          Get-Item dist/MiHome-Windows.exe | Format-List Name, Length
+
+      - name: Упаковка
+        shell: pwsh
+        run: |
+          Copy-Item LICENSE dist/LICENSE
+          Copy-Item README.ru.md dist/README.ru.md
+          Compress-Archive -Path dist/* -DestinationPath MiHome-Windows-ru-win64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MiHome-Windows-ru-win64
+          path: MiHome-Windows-ru-win64.zip
+
+      - name: Публикация в релиз (только для тегов v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MiHome-Windows-ru-win64.zip
